@@ -9,13 +9,13 @@ from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
 # -------------------------------------------------
-# 1. Config
+# Config
 # -------------------------------------------------
 st.set_page_config(page_title="🧙 Harry Potter RAG", layout="wide")
 load_dotenv()
 
 # -------------------------------------------------
-# 2. Session State
+# Session state
 # -------------------------------------------------
 if "recent_queries" not in st.session_state:
     st.session_state.recent_queries = [
@@ -24,17 +24,15 @@ if "recent_queries" not in st.session_state:
         "What is the Patronus charm?"
     ]
 
-# Placeholder for spell sound
 spell_placeholder = st.empty()
 
 # -------------------------------------------------
-# 3. Background
+# Background
 # -------------------------------------------------
 def set_background(path):
     try:
         with open(path, "rb") as f:
             img = base64.b64encode(f.read()).decode()
-
         st.markdown(
             f"""
             <style>
@@ -53,16 +51,12 @@ def set_background(path):
     except:
         pass
 
-
 set_background("assets/background.jpeg")
 
 # -------------------------------------------------
-# 4. Persistent Background Music
+# 🎵 Background music (gapless)
 # -------------------------------------------------
 def render_gapless_music():
-    """
-    Keeps Hedwig's Theme playing across reruns using sessionStorage.
-    """
     try:
         with open("assets/Hedwig.mp3", "rb") as f:
             audio_b64 = base64.b64encode(f.read()).decode()
@@ -72,19 +66,13 @@ def render_gapless_music():
             <audio id="bg-music" loop>
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
             </audio>
-
             <script>
                 const audio = document.getElementById("bg-music");
-
-                const savedTime = sessionStorage.getItem("audio_time");
-                if (savedTime) {{
-                    audio.currentTime = savedTime;
-                }}
-
+                const saved = sessionStorage.getItem("hp_audio_time");
+                if (saved) audio.currentTime = saved;
                 audio.play().catch(() => {{}});
-
                 setInterval(() => {{
-                    sessionStorage.setItem("audio_time", audio.currentTime);
+                    sessionStorage.setItem("hp_audio_time", audio.currentTime);
                 }}, 500);
             </script>
             """,
@@ -94,55 +82,49 @@ def render_gapless_music():
     except:
         pass
 
+render_gapless_music()
 
 # -------------------------------------------------
-# 5. Spell Sound (Plays Every Answer)
+# 🔮 Spell sound
 # -------------------------------------------------
 def play_spell_sound():
     spell_placeholder.empty()
     time.sleep(0.05)
-
     try:
         with open("assets/Spell.mp3", "rb") as f:
             audio = base64.b64encode(f.read()).decode()
-
-        unique_id = f"spell_{time.time()}"
 
         spell_placeholder.markdown(
             f"""
             <audio autoplay>
                 <source src="data:audio/mp3;base64,{audio}" type="audio/mp3">
             </audio>
-            <div style="display:none">{unique_id}</div>
+            <div style="display:none">{time.time()}</div>
             """,
             unsafe_allow_html=True
         )
     except:
         pass
 
-
 # -------------------------------------------------
-# 6. Header
+# Header
 # -------------------------------------------------
 st.markdown(
     "<h1 style='text-align:center;color:#f5c26b;font-family:serif;'>🧙 Harry Potter RAG Assistant ✨</h1>",
     unsafe_allow_html=True
 )
 
-# 🎵 Always render music
-render_gapless_music()
-
 # -------------------------------------------------
-# 7. Gemini Init (CORRECT)
+# ✅ Gemini init (CORRECT)
 # -------------------------------------------------
 try:
-    model = get_client()
+    model = get_client()   # ← already a GenerativeModel
 except Exception as e:
-    st.error(f"Gemini init failed: {e}")
+    st.error(f"Gemini initialization failed: {e}")
     st.stop()
 
 # -------------------------------------------------
-# 8. Input
+# Input
 # -------------------------------------------------
 question = st.text_input(
     "Harry Potter Question",
@@ -150,7 +132,6 @@ question = st.text_input(
     label_visibility="collapsed"
 )
 
-# Recent queries
 if not question:
     st.markdown("### 📜 Recent Magical Inquiries")
     for q in st.session_state.recent_queries:
@@ -158,7 +139,7 @@ if not question:
             question = q
 
 # -------------------------------------------------
-# 9. RAG Pipeline
+# RAG pipeline
 # -------------------------------------------------
 if question:
     with st.spinner("🔍 Searching..."):
@@ -166,49 +147,32 @@ if question:
         chunks = filter_chunks(question, chunks)
 
     if not chunks:
-        st.warning("No relevant context found.")
+        st.warning("No context found.")
         st.stop()
 
     prompt = build_prompt(question, chunks)
 
-    with st.spinner("🧠 Thinking with Gemini..."):
-        try:
-            response = model.generate_content(prompt)
-            answer = response.text.strip()
-        except Exception as e:
-            st.error(f"Gemini error: {e}")
-            st.stop()
+    with st.spinner("🧠 Thinking..."):
+        response = model.generate_content(prompt)
+        answer = response.text.strip()
 
-    # 🔊 Spell sound ON EVERY ANSWER
     play_spell_sound()
 
-    # Save history
     if question not in st.session_state.recent_queries:
         st.session_state.recent_queries.insert(0, question)
         st.session_state.recent_queries = st.session_state.recent_queries[:3]
 
-    # -------------------------------------------------
-    # Answer
-    # -------------------------------------------------
     st.markdown("## 📜 Answer")
     st.markdown(
         f"""
-        <div style="
-            background: rgba(255,248,230,0.95);
-            padding: 25px;
-            border-radius: 15px;
-            font-family: serif;
-            font-size: 18px;
-            color: #3a2c1a;">
+        <div style="background: rgba(255,248,230,0.95); padding: 25px;
+        border-radius: 15px; font-family: serif; font-size: 18px; color: #3a2c1a;">
             {answer}
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # -------------------------------------------------
-    # Sources
-    # -------------------------------------------------
     with st.expander("📚 Sources used"):
         seen = set()
         for c in chunks:
