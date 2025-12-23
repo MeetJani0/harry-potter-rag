@@ -6,13 +6,7 @@
 
 ## 📸 Application Preview
 
-> **Screenshot placeholder**
-> *(Add a screenshot or GIF of the app UI here)*
-
-```
 ![Harry Potter RAG Assistant UI](./assets/app_screenshot.png)
-```
-
 ---
 
 ## 🌐 Live Demo (Deployed)
