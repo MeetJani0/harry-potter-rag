@@ -9,9 +9,13 @@ from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
 # -------------------------------------------------
-# 1. Config
+# 1. App Config
 # -------------------------------------------------
-st.set_page_config(page_title="🧙 Harry Potter RAG", layout="wide")
+st.set_page_config(
+    page_title="🧙 Harry Potter RAG Assistant",
+    layout="wide"
+)
+
 load_dotenv()
 
 # -------------------------------------------------
@@ -27,18 +31,17 @@ if "recent_queries" not in st.session_state:
         "What is the Patronus charm?"
     ]
 
-# -------------------------------------------------
-# 3. Global placeholders
-# -------------------------------------------------
+# Placeholder for spell sound (must persist across reruns)
 spell_placeholder = st.empty()
 
 # -------------------------------------------------
-# 4. Assets
+# 3. Background Image
 # -------------------------------------------------
 def set_background(path):
     try:
         with open(path, "rb") as f:
             img = base64.b64encode(f.read()).decode()
+
         st.markdown(
             f"""
             <style>
@@ -60,7 +63,7 @@ def set_background(path):
 set_background("assets/background.jpeg")
 
 # -------------------------------------------------
-# 🎵 Persistent background music (iframe + JS)
+# 4. 🎵 Persistent Background Music (Iframe + JS)
 # -------------------------------------------------
 def render_gapless_music():
     try:
@@ -76,7 +79,7 @@ def render_gapless_music():
             <script>
                 const audio = document.getElementById("bg-music");
 
-                const savedTime = sessionStorage.getItem("audio_time");
+                const savedTime = sessionStorage.getItem("hp_audio_time");
                 if (savedTime) {{
                     audio.currentTime = savedTime;
                 }}
@@ -84,7 +87,7 @@ def render_gapless_music():
                 audio.play().catch(() => {{}});
 
                 setInterval(() => {{
-                    sessionStorage.setItem("audio_time", audio.currentTime);
+                    sessionStorage.setItem("hp_audio_time", audio.currentTime);
                 }}, 500);
             </script>
             """,
@@ -95,7 +98,7 @@ def render_gapless_music():
         pass
 
 # -------------------------------------------------
-# 🔮 Spell sound (re-trigger safe)
+# 5. 🔮 Spell Sound (Plays EVERY Answer)
 # -------------------------------------------------
 def play_spell_sound():
     spell_placeholder.empty()
@@ -103,14 +106,14 @@ def play_spell_sound():
 
     try:
         with open("assets/Spell.mp3", "rb") as f:
-            audio = base64.b64encode(f.read()).decode()
+            audio_b64 = base64.b64encode(f.read()).decode()
 
         unique_id = f"spell_{time.time()}"
 
         spell_placeholder.markdown(
             f"""
             <audio autoplay>
-                <source src="data:audio/mp3;base64,{audio}" type="audio/mp3">
+                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
             </audio>
             <div style="display:none">{unique_id}</div>
             """,
@@ -120,30 +123,37 @@ def play_spell_sound():
         pass
 
 # -------------------------------------------------
-# 5. Header
+# 6. Header
 # -------------------------------------------------
 st.markdown(
-    "<h1 style='text-align:center;color:#f5c26b;font-family:serif;'>🧙 Harry Potter RAG Assistant ✨</h1>",
+    """
+    <h1 style="text-align:center;color:#f5c26b;font-family:serif;">
+        🧙 Harry Potter RAG Assistant ✨
+    </h1>
+    <p style="text-align:center;color:#f0d9a6;font-size:18px;">
+        Ask questions across all 7 Harry Potter books
+    </p>
+    """,
     unsafe_allow_html=True
 )
 
 # -------------------------------------------------
-# 🎵 Always render background music
+# 🎵 Render music ONLY after first interaction
 # -------------------------------------------------
-render_gapless_music()
+if st.session_state.music_started:
+    render_gapless_music()
 
 # -------------------------------------------------
-# 6. Gemini init
+# 7. Gemini Init
 # -------------------------------------------------
 try:
-    genai = get_client()
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    client = get_client()
 except Exception as e:
     st.error(f"Gemini init failed: {e}")
     st.stop()
 
 # -------------------------------------------------
-# 7. Input
+# 8. Input
 # -------------------------------------------------
 question = st.text_input(
     "Harry Potter Question",
@@ -151,7 +161,7 @@ question = st.text_input(
     label_visibility="collapsed"
 )
 
-# Recent queries
+# Recent Queries
 if not question:
     st.markdown("### 📜 Recent Magical Inquiries")
     for q in st.session_state.recent_queries:
@@ -159,30 +169,36 @@ if not question:
             question = q
 
 # -------------------------------------------------
-# 8. RAG pipeline
+# 9. RAG Pipeline
 # -------------------------------------------------
 if question:
-    st.session_state.music_started = True
+    # 🔑 First interaction unlocks audio autoplay
+    if not st.session_state.music_started:
+        st.session_state.music_started = True
 
-    with st.spinner("🔍 Searching..."):
+    with st.spinner("🔍 Searching the books..."):
         chunks = retrieve(question)
         chunks = filter_chunks(question, chunks)
 
     if not chunks:
-        st.warning("No context found.")
+        st.warning("No relevant context found.")
         st.stop()
 
     prompt = build_prompt(question, chunks)
 
-    with st.spinner("🧠 Thinking..."):
+    with st.spinner("🧠 Thinking with Gemini..."):
         try:
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=prompt,
+                config={"temperature": 0}
+            )
             answer = response.text.strip()
         except Exception as e:
             st.error(f"Gemini error: {e}")
             st.stop()
 
-    # 🔊 Spell sound ON EVERY ANSWER
+    # 🔊 SPELL SOUND (EVERY ANSWER)
     play_spell_sound()
 
     # Save history
@@ -219,12 +235,14 @@ if question:
             if key in seen:
                 continue
             seen.add(key)
-            st.markdown(f"**{c.get('book')}**  \n{c.get('chapter')}")
+            st.markdown(
+                f"**{c.get('book','Unknown Book')}**  \n{c.get('chapter','Unknown Chapter')}"
+            )
 
 # -------------------------------------------------
 # Footer
 # -------------------------------------------------
 st.markdown(
-    "<hr><p style='text-align:center;color:#f0d9a6;'>⚡ RAG + Gemini + FAISS</p>",
+    "<hr><p style='text-align:center;color:#f0d9a6;'>⚡ RAG + Gemini 2.5 Flash + FAISS</p>",
     unsafe_allow_html=True
 )
