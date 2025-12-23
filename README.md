@@ -16,6 +16,23 @@
 
 ---
 
+## ⚠️ Important Note — Gemini API Quota
+
+This project uses the **free-tier Gemini API**, which has a **strict daily request limit (~20 requests)**.
+
+If you encounter an error like:
+
+```
+Gemini error: 429 RESOURCE_EXHAUSTED
+You exceeded your current quota.
+```
+
+👉 Please wait a few hours and try again.
+This is an **API quota limitation**, not an issue with the application or deployment.
+
+
+---
+
 ## 🧠 Project Overview
 
 This project is an **end-to-end RAG system** that allows users to ask questions across all **7 Harry Potter books**, with answers generated **strictly from retrieved book context**.
@@ -93,22 +110,6 @@ This project intentionally explores **real deployment UX challenges**, especiall
 * Answers are **forced to be grounded** in retrieved context
 * If context is insufficient, the model responds with *“Not found in the book”*
 * Prevents hallucination-heavy behavior
-
----
-
-## ⚠️ Important Note — Gemini API Quota
-
-This project uses the **free-tier Gemini API**, which has a **strict daily request limit (~20 requests)**.
-
-If you encounter an error like:
-
-```
-Gemini error: 429 RESOURCE_EXHAUSTED
-You exceeded your current quota.
-```
-
-👉 Please wait a few hours and try again.
-This is an **API quota limitation**, not an issue with the application or deployment.
 
 ---
 
