@@ -9,13 +9,9 @@ from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
 # -------------------------------------------------
-# 1. Page Config
+# 1. Config
 # -------------------------------------------------
-st.set_page_config(
-    page_title="🧙 Harry Potter RAG Assistant",
-    layout="wide"
-)
-
+st.set_page_config(page_title="🧙 Harry Potter RAG", layout="wide")
 load_dotenv()
 
 # -------------------------------------------------
@@ -28,13 +24,11 @@ if "recent_queries" not in st.session_state:
         "What is the Patronus charm?"
     ]
 
-# -------------------------------------------------
-# 3. Global placeholders
-# -------------------------------------------------
+# Placeholder for spell sound
 spell_placeholder = st.empty()
 
 # -------------------------------------------------
-# 4. Background Image
+# 3. Background
 # -------------------------------------------------
 def set_background(path):
     try:
@@ -46,8 +40,8 @@ def set_background(path):
             <style>
             .stApp {{
                 background:
-                    linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.85)),
-                    url("data:image/jpeg;base64,{img}");
+                  linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)),
+                  url("data:image/jpeg;base64,{img}");
                 background-size: cover;
                 background-position: center;
                 background-attachment: fixed;
@@ -59,12 +53,16 @@ def set_background(path):
     except:
         pass
 
+
 set_background("assets/background.jpeg")
 
 # -------------------------------------------------
-# 🎵 Persistent Background Music (NO GAPS)
+# 4. Persistent Background Music
 # -------------------------------------------------
 def render_gapless_music():
+    """
+    Keeps Hedwig's Theme playing across reruns using sessionStorage.
+    """
     try:
         with open("assets/Hedwig.mp3", "rb") as f:
             audio_b64 = base64.b64encode(f.read()).decode()
@@ -96,8 +94,9 @@ def render_gapless_music():
     except:
         pass
 
+
 # -------------------------------------------------
-# 🔮 Spell Sound (re-triggers every answer)
+# 5. Spell Sound (Plays Every Answer)
 # -------------------------------------------------
 def play_spell_sound():
     spell_placeholder.empty()
@@ -121,35 +120,29 @@ def play_spell_sound():
     except:
         pass
 
+
 # -------------------------------------------------
-# 5. Header
+# 6. Header
 # -------------------------------------------------
 st.markdown(
-    """
-    <h1 style="text-align:center;color:#f5c26b;font-family:serif;">
-        🧙 Harry Potter RAG Assistant ✨
-    </h1>
-    <p style="text-align:center;color:#f0d9a6;font-size:18px;">
-        Ask questions across all 7 Harry Potter books
-    </p>
-    """,
+    "<h1 style='text-align:center;color:#f5c26b;font-family:serif;'>🧙 Harry Potter RAG Assistant ✨</h1>",
     unsafe_allow_html=True
 )
 
-# 🎵 Always render background music
+# 🎵 Always render music
 render_gapless_music()
 
 # -------------------------------------------------
-# 6. Gemini Init (CORRECT + STABLE)
+# 7. Gemini Init (CORRECT)
 # -------------------------------------------------
 try:
-    model = get_client()   # returns GenerativeModel("gemini-2.5-flash")
+    model = get_client()
 except Exception as e:
     st.error(f"Gemini init failed: {e}")
     st.stop()
 
 # -------------------------------------------------
-# 7. Input
+# 8. Input
 # -------------------------------------------------
 question = st.text_input(
     "Harry Potter Question",
@@ -165,10 +158,10 @@ if not question:
             question = q
 
 # -------------------------------------------------
-# 8. RAG Pipeline
+# 9. RAG Pipeline
 # -------------------------------------------------
 if question:
-    with st.spinner("🔍 Searching the books..."):
+    with st.spinner("🔍 Searching..."):
         chunks = retrieve(question)
         chunks = filter_chunks(question, chunks)
 
@@ -186,10 +179,10 @@ if question:
             st.error(f"Gemini error: {e}")
             st.stop()
 
-    # 🔊 Spell sound on EVERY answer
+    # 🔊 Spell sound ON EVERY ANSWER
     play_spell_sound()
 
-    # Save query history
+    # Save history
     if question not in st.session_state.recent_queries:
         st.session_state.recent_queries.insert(0, question)
         st.session_state.recent_queries = st.session_state.recent_queries[:3]
@@ -223,14 +216,12 @@ if question:
             if key in seen:
                 continue
             seen.add(key)
-            st.markdown(
-                f"**{c.get('book', 'Unknown Book')}**  \n{c.get('chapter', 'Unknown Chapter')}"
-            )
+            st.markdown(f"**{c.get('book')}**  \n{c.get('chapter')}")
 
 # -------------------------------------------------
 # Footer
 # -------------------------------------------------
 st.markdown(
-    "<hr><p style='text-align:center;color:#f0d9a6;'>⚡ RAG + Gemini 2.5 Flash + FAISS</p>",
+    "<hr><p style='text-align:center;color:#f0d9a6;'>⚡ RAG + Gemini + FAISS</p>",
     unsafe_allow_html=True
 )
