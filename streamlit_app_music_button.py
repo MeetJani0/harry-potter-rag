@@ -8,13 +8,13 @@ from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
 # -------------------------------------------------
-# Config
+# 1. Config
 # -------------------------------------------------
 st.set_page_config(page_title="🧙 Harry Potter RAG", layout="wide")
 load_dotenv()
 
 # -------------------------------------------------
-# Session State
+# 2. Session State
 # -------------------------------------------------
 if "music_enabled" not in st.session_state:
     st.session_state.music_enabled = False
@@ -26,25 +26,24 @@ if "recent_queries" not in st.session_state:
         "What is the Patronus charm?"
     ]
 
-# -------------------------------------------------
-# 🔧 CRITICAL FIX: Create placeholder every run
-# -------------------------------------------------
-# Do NOT put this inside an "if not in session_state" block.
-# It needs to be recreated every time the script reruns to exist in the layout.
+# 🔑 Spell sound placeholder (MUST be recreated every run)
 spell_placeholder = st.empty()
 
 # -------------------------------------------------
-# Assets
+# 3. Background
 # -------------------------------------------------
 def set_background(path):
     try:
         with open(path, "rb") as f:
             img = base64.b64encode(f.read()).decode()
+
         st.markdown(
             f"""
             <style>
             .stApp {{
-                background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)), url("data:image/jpeg;base64,{img}");
+                background:
+                  linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)),
+                  url("data:image/jpeg;base64,{img}");
                 background-size: cover;
                 background-position: center;
                 background-attachment: fixed;
@@ -53,58 +52,66 @@ def set_background(path):
             """,
             unsafe_allow_html=True
         )
-    except Exception:
+    except:
         pass
 
 set_background("assets/background.jpeg")
 
+# -------------------------------------------------
+# 4. Background Music (DEPLOYMENT SAFE)
+# -------------------------------------------------
 def background_music():
     try:
         with open("assets/Hedwig.mp3", "rb") as f:
             audio = base64.b64encode(f.read()).decode()
+
         st.markdown(
-            f'<audio autoplay loop><source src="data:audio/mp3;base64,{audio}" type="audio/mp3"></audio>',
+            f"""
+            <audio autoplay loop>
+                <source src="data:audio/mp3;base64,{audio}" type="audio/mp3">
+            </audio>
+            """,
             unsafe_allow_html=True
         )
-    except Exception:
+    except:
         pass
 
 # -------------------------------------------------
-# Audio Helper
+# 5. Spell Sound (Plays EVERY answer)
 # -------------------------------------------------
-def spell_sound():
-    # 1. Clear the placeholder we created at the top of the script
+def play_spell_sound():
     spell_placeholder.empty()
-    time.sleep(0.05) 
-    
+    time.sleep(0.05)
+
     try:
         with open("assets/Spell.mp3", "rb") as f:
             audio = base64.b64encode(f.read()).decode()
-        
-        # 2. Unique ID
+
         unique_id = f"spell_{time.time()}"
-        
-        # 3. Write to the global placeholder variable
+
         spell_placeholder.markdown(
             f"""
-            <audio autoplay="true">
+            <audio autoplay>
                 <source src="data:audio/mp3;base64,{audio}" type="audio/mp3">
             </audio>
             <div style="display:none">{unique_id}</div>
             """,
             unsafe_allow_html=True
         )
-    except Exception:
+    except:
         pass
 
 # -------------------------------------------------
-# Header
+# 6. Header
 # -------------------------------------------------
 st.markdown(
     "<h1 style='text-align:center;color:#f5c26b;font-family:serif;'>🧙 Harry Potter RAG Assistant ✨</h1>",
     unsafe_allow_html=True
 )
 
+# -------------------------------------------------
+# 🎵 Enable Music Button (required for browsers)
+# -------------------------------------------------
 if not st.session_state.music_enabled:
     if st.button("✨ Enter Hogwarts (Enable Music) ✨", use_container_width=True):
         st.session_state.music_enabled = True
@@ -113,14 +120,17 @@ if not st.session_state.music_enabled:
 if st.session_state.music_enabled:
     background_music()
 
+# -------------------------------------------------
+# 7. Gemini Init (CORRECT)
+# -------------------------------------------------
 try:
-    client = get_client()
+    model = get_client()  # 🔑 returns GenerativeModel
 except Exception as e:
-    st.error(f"API Error: {e}")
+    st.error(f"Gemini init failed: {e}")
     st.stop()
 
 # -------------------------------------------------
-# Input
+# 8. Input
 # -------------------------------------------------
 question = st.text_input(
     "Harry Potter Question",
@@ -128,6 +138,7 @@ question = st.text_input(
     label_visibility="collapsed"
 )
 
+# Recent queries
 if not question:
     st.markdown("### 📜 Recent Magical Inquiries")
     for q in st.session_state.recent_queries:
@@ -135,45 +146,49 @@ if not question:
             question = q
 
 # -------------------------------------------------
-# Pipeline
+# 9. RAG Pipeline
 # -------------------------------------------------
 if question:
-    with st.spinner("🔍 Searching..."):
+    with st.spinner("🔍 Searching the books..."):
         chunks = retrieve(question)
         chunks = filter_chunks(question, chunks)
-    
+
     if not chunks:
-        st.warning("No context found.")
+        st.warning("No relevant context found.")
         st.stop()
 
     prompt = build_prompt(question, chunks)
 
-    with st.spinner("🧠 Thinking..."):
+    with st.spinner("🧠 Thinking with Gemini..."):
         try:
-            response = client.models.generate_content(
-                model="models/gemini-2.5-flash",
-                contents=prompt,
-                config={"temperature": 0}
-            )
+            # ✅ CORRECT Gemini call
+            response = model.generate_content(prompt)
             answer = response.text.strip()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Gemini error: {e}")
             st.stop()
 
-    # 🔊 TRIGGER SOUND (uses the fresh placeholder)
-    spell_sound()
+    # 🔊 Spell sound ON ANSWER
+    play_spell_sound()
 
+    # Save history
     if question not in st.session_state.recent_queries:
         st.session_state.recent_queries.insert(0, question)
         st.session_state.recent_queries = st.session_state.recent_queries[:3]
 
     # -------------------------------------------------
-    # Answer Display
+    # Answer
     # -------------------------------------------------
     st.markdown("## 📜 Answer")
     st.markdown(
         f"""
-        <div style='background: rgba(255,248,230,0.95); padding: 25px; border-radius: 15px; color: #3a2c1a; font-family: serif; font-size: 18px;'>
+        <div style="
+            background: rgba(255,248,230,0.95);
+            padding: 25px;
+            border-radius: 15px;
+            font-family: serif;
+            font-size: 18px;
+            color: #3a2c1a;">
             {answer}
         </div>
         """,
@@ -181,8 +196,8 @@ if question:
     )
 
     # -------------------------------------------------
-    # Sources Display (Restored)
-    # -------------------------------------------------
+    # Sources
+    --------------------------------------------------
     with st.expander("📚 Sources used"):
         seen = set()
         for c in chunks:
@@ -191,11 +206,11 @@ if question:
                 continue
             seen.add(key)
             st.markdown(
-                f"**{c.get('book','Unknown Book')}** \n{c.get('chapter','Unknown Chapter')}"
+                f"**{c.get('book','Unknown Book')}**  \n{c.get('chapter','Unknown Chapter')}"
             )
 
 # -------------------------------------------------
-# Footer (Restored)
+# Footer
 # -------------------------------------------------
 st.markdown(
     "<hr><p style='text-align:center;color:#f0d9a6;'>⚡ RAG + Gemini + FAISS</p>",
