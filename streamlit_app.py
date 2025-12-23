@@ -9,9 +9,13 @@ from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
 # -------------------------------------------------
-# 1. Config
+# 1. Page Config
 # -------------------------------------------------
-st.set_page_config(page_title="🧙 Harry Potter RAG", layout="wide")
+st.set_page_config(
+    page_title="🧙 Harry Potter RAG Assistant",
+    layout="wide"
+)
+
 load_dotenv()
 
 # -------------------------------------------------
@@ -30,9 +34,9 @@ spell_placeholder = st.empty()
 # -------------------------------------------------
 # 3. Background
 # -------------------------------------------------
-def set_background(path):
+def set_background(image_path):
     try:
-        with open(path, "rb") as f:
+        with open(image_path, "rb") as f:
             img = base64.b64encode(f.read()).decode()
 
         st.markdown(
@@ -40,8 +44,8 @@ def set_background(path):
             <style>
             .stApp {{
                 background:
-                  linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)),
-                  url("data:image/jpeg;base64,{img}");
+                    linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)),
+                    url("data:image/jpeg;base64,{img}");
                 background-size: cover;
                 background-position: center;
                 background-attachment: fixed;
@@ -53,15 +57,17 @@ def set_background(path):
     except:
         pass
 
-
 set_background("assets/background.jpeg")
 
 # -------------------------------------------------
-# 4. Persistent Background Music
+# 4. 🎵 Persistent Background Music (BEST PRACTICE)
 # -------------------------------------------------
-def render_gapless_music():
+def render_background_music():
     """
-    Keeps Hedwig's Theme playing across reruns using sessionStorage.
+    Uses iframe + sessionStorage to:
+    - Autoplay after first interaction
+    - Resume from last timestamp
+    - Never restart on rerun
     """
     try:
         with open("assets/Hedwig.mp3", "rb") as f:
@@ -76,7 +82,7 @@ def render_gapless_music():
             <script>
                 const audio = document.getElementById("bg-music");
 
-                const savedTime = sessionStorage.getItem("audio_time");
+                const savedTime = sessionStorage.getItem("hp_audio_time");
                 if (savedTime) {{
                     audio.currentTime = savedTime;
                 }}
@@ -84,7 +90,7 @@ def render_gapless_music():
                 audio.play().catch(() => {{}});
 
                 setInterval(() => {{
-                    sessionStorage.setItem("audio_time", audio.currentTime);
+                    sessionStorage.setItem("hp_audio_time", audio.currentTime);
                 }}, 500);
             </script>
             """,
@@ -94,9 +100,11 @@ def render_gapless_music():
     except:
         pass
 
+# Always render (safe — JS handles everything)
+render_background_music()
 
 # -------------------------------------------------
-# 5. Spell Sound (Plays Every Answer)
+# 5. 🔮 Spell Sound (Plays EVERY Answer)
 # -------------------------------------------------
 def play_spell_sound():
     spell_placeholder.empty()
@@ -120,25 +128,29 @@ def play_spell_sound():
     except:
         pass
 
-
 # -------------------------------------------------
 # 6. Header
 # -------------------------------------------------
 st.markdown(
-    "<h1 style='text-align:center;color:#f5c26b;font-family:serif;'>🧙 Harry Potter RAG Assistant ✨</h1>",
+    """
+    <h1 style="text-align:center;color:#f5c26b;font-family:serif;">
+        🧙 Harry Potter RAG Assistant ✨
+    </h1>
+    <p style="text-align:center;color:#f0d9a6;font-size:18px;">
+        Ask questions across all 7 Harry Potter books
+    </p>
+    """,
     unsafe_allow_html=True
 )
 
-# 🎵 Always render music
-render_gapless_music()
-
 # -------------------------------------------------
-# 7. Gemini Init (CORRECT)
+# 7. Gemini Init (CORRECT API)
 # -------------------------------------------------
 try:
-    model = get_client()
+    genai = get_client()
+    model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
-    st.error(f"Gemini init failed: {e}")
+    st.error(f"Gemini initialization failed: {e}")
     st.stop()
 
 # -------------------------------------------------
@@ -150,7 +162,7 @@ question = st.text_input(
     label_visibility="collapsed"
 )
 
-# Recent queries
+# Recent Queries
 if not question:
     st.markdown("### 📜 Recent Magical Inquiries")
     for q in st.session_state.recent_queries:
@@ -161,7 +173,7 @@ if not question:
 # 9. RAG Pipeline
 # -------------------------------------------------
 if question:
-    with st.spinner("🔍 Searching..."):
+    with st.spinner("🔍 Searching the books..."):
         chunks = retrieve(question)
         chunks = filter_chunks(question, chunks)
 
@@ -179,10 +191,10 @@ if question:
             st.error(f"Gemini error: {e}")
             st.stop()
 
-    # 🔊 Spell sound ON EVERY ANSWER
+    # 🔊 Spell sound on every answer
     play_spell_sound()
 
-    # Save history
+    # Save query
     if question not in st.session_state.recent_queries:
         st.session_state.recent_queries.insert(0, question)
         st.session_state.recent_queries = st.session_state.recent_queries[:3]
@@ -216,7 +228,9 @@ if question:
             if key in seen:
                 continue
             seen.add(key)
-            st.markdown(f"**{c.get('book')}**  \n{c.get('chapter')}")
+            st.markdown(
+                f"**{c.get('book','Unknown Book')}**  \n{c.get('chapter','Unknown Chapter')}"
+            )
 
 # -------------------------------------------------
 # Footer
