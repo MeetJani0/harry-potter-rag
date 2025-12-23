@@ -17,7 +17,6 @@ load_dotenv()
 # -------------------------------------------------
 # 2. Session State
 # -------------------------------------------------
-# We track if music should be playing so we don't reset the timer
 if "music_started" not in st.session_state:
     st.session_state.music_started = False
 
@@ -29,9 +28,8 @@ if "recent_queries" not in st.session_state:
     ]
 
 # -------------------------------------------------
-# 3. GLOBAL PLACEHOLDERS
+# 3. Global placeholders
 # -------------------------------------------------
-# spell_placeholder needs to be cleared/filled for sound effects
 spell_placeholder = st.empty()
 
 # -------------------------------------------------
@@ -45,7 +43,9 @@ def set_background(path):
             f"""
             <style>
             .stApp {{
-                background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)), url("data:image/jpeg;base64,{img}");
+                background:
+                  linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)),
+                  url("data:image/jpeg;base64,{img}");
                 background-size: cover;
                 background-position: center;
                 background-attachment: fixed;
@@ -54,72 +54,70 @@ def set_background(path):
             """,
             unsafe_allow_html=True
         )
-    except: pass
+    except:
+        pass
 
 set_background("assets/background.jpeg")
 
+# -------------------------------------------------
+# 🎵 Persistent background music (iframe + JS)
+# -------------------------------------------------
 def render_gapless_music():
-    """
-    Embeds audio in an iframe with aggressive JS to resume playback instantly.
-    This creates the illusion of continuous play.
-    """
     try:
         with open("assets/Hedwig.mp3", "rb") as f:
             audio_b64 = base64.b64encode(f.read()).decode()
-        
-        # We use components.html because it is an iframe. 
-        # It handles the JS lifecycle better than st.markdown.
+
         components.html(
             f"""
             <audio id="bg-music" loop>
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
             </audio>
+
             <script>
-                var audio = document.getElementById("bg-music");
-                
-                // 1. Recover timestamp from session storage immediately
-                var savedTime = sessionStorage.getItem("audio_time");
+                const audio = document.getElementById("bg-music");
+
+                const savedTime = sessionStorage.getItem("audio_time");
                 if (savedTime) {{
                     audio.currentTime = savedTime;
                 }}
-                
-                // 2. Play immediately
-                // Note: Browsers block this until the user has clicked at least once on the page.
-                // Since the user is typing in a box, that counts as interaction.
-                audio.play();
 
-                // 3. Save timestamp every 0.5 seconds
-                setInterval(function() {{
+                audio.play().catch(() => {{}});
+
+                setInterval(() => {{
                     sessionStorage.setItem("audio_time", audio.currentTime);
                 }}, 500);
             </script>
             """,
-            height=0, # Invisible player
+            height=0,
             width=0
         )
-    except: pass
+    except:
+        pass
 
+# -------------------------------------------------
+# 🔮 Spell sound (re-trigger safe)
+# -------------------------------------------------
 def play_spell_sound():
-    # Clear previous sound
     spell_placeholder.empty()
     time.sleep(0.05)
+
     try:
         with open("assets/Spell.mp3", "rb") as f:
             audio = base64.b64encode(f.read()).decode()
-        
-        # Unique ID to force re-render
+
         unique_id = f"spell_{time.time()}"
-        
+
         spell_placeholder.markdown(
             f"""
-            <audio autoplay="true">
+            <audio autoplay>
                 <source src="data:audio/mp3;base64,{audio}" type="audio/mp3">
             </audio>
             <div style="display:none">{unique_id}</div>
             """,
             unsafe_allow_html=True
         )
-    except: pass
+    except:
+        pass
 
 # -------------------------------------------------
 # 5. Header
@@ -130,27 +128,30 @@ st.markdown(
 )
 
 # -------------------------------------------------
-# 🎵 MUSIC LOGIC (Auto-Start)
+# 🎵 Always render background music
 # -------------------------------------------------
-# We render this on every run. The JS inside handles the resume logic.
 render_gapless_music()
 
 # -------------------------------------------------
-# 6. Input
+# 6. Gemini init
 # -------------------------------------------------
 try:
-    client = get_client()
-except:
-    st.error("Check API Key")
+    genai = get_client()
+    model = genai.GenerativeModel("gemini-2.5-flash")
+except Exception as e:
+    st.error(f"Gemini init failed: {e}")
     st.stop()
 
+# -------------------------------------------------
+# 7. Input
+# -------------------------------------------------
 question = st.text_input(
     "Harry Potter Question",
     placeholder="e.g. How many Horcruxes were created?",
     label_visibility="collapsed"
 )
 
-# Recent queries buttons
+# Recent queries
 if not question:
     st.markdown("### 📜 Recent Magical Inquiries")
     for q in st.session_state.recent_queries:
@@ -158,17 +159,15 @@ if not question:
             question = q
 
 # -------------------------------------------------
-# 7. Pipeline
+# 8. RAG pipeline
 # -------------------------------------------------
 if question:
-    # Flag that we have started (helps with browser permissions)
-    if not st.session_state.music_started:
-        st.session_state.music_started = True
+    st.session_state.music_started = True
 
     with st.spinner("🔍 Searching..."):
         chunks = retrieve(question)
         chunks = filter_chunks(question, chunks)
-    
+
     if not chunks:
         st.warning("No context found.")
         st.stop()
@@ -177,36 +176,42 @@ if question:
 
     with st.spinner("🧠 Thinking..."):
         try:
-            response = client.models.generate_content(
-                model="models/gemini-2.5-flash",
-                contents=prompt,
-                config={"temperature": 0}
-            )
+            response = model.generate_content(prompt)
             answer = response.text.strip()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Gemini error: {e}")
             st.stop()
 
-    # 🔊 TRIGGER SPELL SOUND
+    # 🔊 Spell sound ON EVERY ANSWER
     play_spell_sound()
 
-    # Update history
+    # Save history
     if question not in st.session_state.recent_queries:
         st.session_state.recent_queries.insert(0, question)
         st.session_state.recent_queries = st.session_state.recent_queries[:3]
 
-    # Display Answer
+    # -------------------------------------------------
+    # Answer
+    # -------------------------------------------------
     st.markdown("## 📜 Answer")
     st.markdown(
         f"""
-        <div style='background: rgba(255,248,230,0.95); padding: 25px; border-radius: 15px; color: #3a2c1a; font-family: serif; font-size: 18px;'>
+        <div style="
+            background: rgba(255,248,230,0.95);
+            padding: 25px;
+            border-radius: 15px;
+            font-family: serif;
+            font-size: 18px;
+            color: #3a2c1a;">
             {answer}
         </div>
         """,
         unsafe_allow_html=True
     )
 
+    # -------------------------------------------------
     # Sources
+    # -------------------------------------------------
     with st.expander("📚 Sources used"):
         seen = set()
         for c in chunks:
@@ -214,7 +219,7 @@ if question:
             if key in seen:
                 continue
             seen.add(key)
-            st.markdown(f"**{c.get('book')}** \n{c.get('chapter')}")
+            st.markdown(f"**{c.get('book')}**  \n{c.get('chapter')}")
 
 # -------------------------------------------------
 # Footer

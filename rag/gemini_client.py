@@ -1,8 +1,10 @@
-from google import genai
 import os
+import google.generativeai as genai
 
 def get_client():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("❌ GEMINI_API_KEY not found. Check .env loading.")
-    return genai.Client(api_key=api_key)
+        raise ValueError("GEMINI_API_KEY not found in environment variables")
+
+    genai.configure(api_key=api_key)
+    return genai
