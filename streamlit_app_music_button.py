@@ -151,7 +151,7 @@ if not question:
 if question:
     with st.spinner("🔍 Searching the books..."):
         chunks = retrieve(question)
-        #chunks = filter_chunks(question, chunks)
+        chunks = rerank(question, chunks)
 
     if not chunks:
         st.warning("No relevant context found.")
