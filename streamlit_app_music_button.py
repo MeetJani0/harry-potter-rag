@@ -4,6 +4,7 @@ import time
 from dotenv import load_dotenv
 
 from rag.retriever import retrieve, filter_chunks
+from rag.reranker import rerank
 from rag.prompt import build_prompt
 from rag.gemini_client import get_client
 
@@ -152,6 +153,7 @@ if question:
     with st.spinner("🔍 Searching the books..."):
         chunks = retrieve(question)
         chunks = rerank(question, chunks)
+        #chunks = filter_chunks(question, chunks)
 
     if not chunks:
         st.warning("No relevant context found.")
