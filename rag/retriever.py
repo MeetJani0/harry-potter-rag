@@ -7,7 +7,7 @@ from ingestion.embeddings import embed
 VECTOR_BASE = "vector_store"
 
 
-def retrieve(question: str, k_per_book: int = 6):
+def retrieve(question: str, k_per_book: int = 12):
     """
     Balanced per-book retrieval:
     - Search each book independently
