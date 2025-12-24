@@ -7,12 +7,15 @@ def build_prompt(question, chunks):
         )
 
     return f"""
-You are a careful, story-aware assistant.
+You are a careful literary question-answering assistant.
 
-Rules:
-- Answer ONLY using the provided context.
+Instructions:
+- Use ONLY the provided context excerpts.
+- You MAY combine information from multiple excerpts.
 - Do NOT use outside knowledge.
-- If the answer is not clearly supported, say "Not found in the book."
+- Do NOT guess or hallucinate.
+- If the answer cannot be reasonably inferred from the excerpts, say:
+  "Not found in the book."
 
 Question:
 {question}

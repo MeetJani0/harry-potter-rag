@@ -1,17 +1,35 @@
 import spacy
+import re
 
 nlp = spacy.load("en_core_web_sm")
 
-def chunk_text(structured_pages, max_chars=1200, overlap_sentences=2):
+CHAPTER_HEADING_RE = re.compile(r"^chapter\s+\w+", re.IGNORECASE)
+
+def clean_text(text: str) -> str:
     """
-    Sentence-aware chunking:
-    - Never cuts sentences
-    - Preserves narrative coherence
-    - Overlaps by sentences, not characters
+    Remove chapter headings and excessive whitespace.
+    """
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if CHAPTER_HEADING_RE.match(line):
+            continue
+        if line.isupper() and len(line.split()) <= 6:
+            # Likely chapter title
+            continue
+        lines.append(line)
+    return " ".join(lines)
+
+
+def chunk_text(structured_pages, max_chars=550, overlap_sents=3):
+    """
+    Dense, sentence-aware chunking optimized for fact retrieval.
     """
 
     chunks = []
-    buffer_sentences = []
+    buffer = []
     buffer_len = 0
     meta = None
 
@@ -21,15 +39,14 @@ def chunk_text(structured_pages, max_chars=1200, overlap_sentences=2):
 
         current_meta = (p["book"], p["chapter"])
 
-        # Flush buffer on chapter change
         if meta and current_meta != meta:
-            chunks.extend(_flush(buffer_sentences, meta))
-            buffer_sentences = []
-            buffer_len = 0
+            _flush(chunks, buffer, meta)
+            buffer, buffer_len = [], 0
 
         meta = current_meta
 
-        doc = nlp(p["text"])
+        text = clean_text(p["text"])
+        doc = nlp(text)
 
         for sent in doc.sents:
             s = sent.text.strip()
@@ -37,35 +54,24 @@ def chunk_text(structured_pages, max_chars=1200, overlap_sentences=2):
                 continue
 
             if buffer_len + len(s) > max_chars:
-                chunks.append({
-                    "book": meta[0],
-                    "chapter": meta[1],
-                    "text": " ".join(buffer_sentences)
-                })
+                _flush(chunks, buffer, meta)
+                buffer = buffer[-overlap_sents:]
+                buffer_len = sum(len(x) for x in buffer)
 
-                # sentence-level overlap
-                buffer_sentences = buffer_sentences[-overlap_sentences:]
-                buffer_len = sum(len(x) for x in buffer_sentences)
-
-            buffer_sentences.append(s)
+            buffer.append(s)
             buffer_len += len(s)
 
-    # final flush
-    if buffer_sentences:
-        chunks.append({
-            "book": meta[0],
-            "chapter": meta[1],
-            "text": " ".join(buffer_sentences)
-        })
+    if buffer:
+        _flush(chunks, buffer, meta)
 
     return chunks
 
 
-def _flush(sentences, meta):
-    if not sentences:
-        return []
-    return [{
+def _flush(chunks, buffer, meta):
+    if not buffer:
+        return
+    chunks.append({
         "book": meta[0],
         "chapter": meta[1],
-        "text": " ".join(sentences)
-    }]
+        "text": " ".join(buffer)
+    })
